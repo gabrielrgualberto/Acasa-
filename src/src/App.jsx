@@ -50,7 +50,7 @@ const css = `
 .cal-event { font-size: 10px; padding: 2px 4px; border-radius: 2px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .app-header { background: linear-gradient(135deg,#1a1710 0%,#0f0e0c 100%); border-bottom: 1px solid #2a2620; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; }
 .logo-area { display: flex; align-items: center; gap: 14px; }
-.logo-img { height: 52px; width: auto; object-fit: contain; }
+.logo-img { height: 52px; width: auto; object-fit: contain; border-radius: 4px; }
 .logo-text-block .label { font-size: 11px; letter-spacing: 4px; color: #C9A84C; text-transform: uppercase; margin-bottom: 2px; }
 .logo-text-block .title { font-size: 20px; font-weight: 400; color: #f0e8d8; letter-spacing: 1px; }
 .view-btns { display: flex; gap: 8px; }
@@ -133,7 +133,7 @@ export default function App() {
       <div style={{ minHeight:"100vh", background:"#0f0e0c", fontFamily:"'Georgia','Times New Roman',serif", color:"#e8e0d0" }}>
         <div className="app-header">
           <div className="logo-area">
-            <img src="/logo.png" alt="À Casa" className="logo-img" onError={e => e.target.style.display='none'} />
+            <img src="/acasafoto.jpeg" alt="À Casa" className="logo-img" onError={e => e.target.style.display='none'} />
             <div className="logo-text-block">
               <div className="label">Agenda de Eventos</div>
               <div className="title">À Casa</div>

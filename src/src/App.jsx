@@ -1,6 +1,24 @@
 import { useState, useEffect } from "react";
 
-const STORAGE_KEY = "casa-eventos-calendar";
+const SUPABASE_URL = "https://azruaouuhotikjtjnlec.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6cnVhb3V1aG90aWtqdGpubGVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNDg3NTksImV4cCI6MjA5NDcyNDc1OX0.mHYdGlUKyF_1A8C3jQuJtbbiSY4sJs5kAiaQ5fUVqtM";
+
+const api = async (method, path, body) => {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": method === "POST" ? "return=representation" : "",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+};
+
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DAYS_SHORT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 const EVENT_COLORS = [
@@ -20,14 +38,21 @@ export default function App() {
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [form, setForm] = useState({ name: "", time: "", description: "", color: "#C9A84C" });
   const [view, setView] = useState("calendar");
 
-  useEffect(() => { try { const s = localStorage.getItem(STORAGE_KEY); if (s) setEvents(JSON.parse(s)); } catch {} }, []);
-  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(events)); } catch {} }, [events]);
+  const loadEvents = async () => {
+    setLoading(true);
+    const data = await api("GET", "events?select=*&order=date.asc");
+    if (data) setEvents(data);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadEvents(); }, []);
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
@@ -37,11 +62,26 @@ export default function App() {
 
   const eventsForDate = (d) => events.filter(e => e.date === d);
   const openNewEvent = (d) => { setSelectedDate(d); setEditingEvent(null); setForm({ name:"", time:"", description:"", color:"#C9A84C" }); setShowModal(true); };
-  const openEditEvent = (ev) => { setEditingEvent(ev); setForm({ name:ev.name, time:ev.time, description:ev.description, color:ev.color }); setSelectedDate(ev.date); setShowModal(true); };
-  const saveEvent = () => { if (!form.name.trim()) return; if (editingEvent) { setEvents(evs => evs.map(e => e.id===editingEvent.id ? {...e,...form} : e)); } else { setEvents(evs => [...evs, { id:Date.now(), date:selectedDate, ...form }]); } setShowModal(false); };
-  const deleteEvent = (id) => setEvents(evs => evs.filter(e => e.id !== id));
+  const openEditEvent = (ev) => { setEditingEvent(ev); setForm({ name:ev.name, time:ev.time||"", description:ev.description||"", color:ev.color }); setSelectedDate(ev.date); setShowModal(true); };
 
-  const upcomingEvents = [...events].filter(e => e.date >= formatDate(today)).sort((a,b) => a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
+  const saveEvent = async () => {
+    if (!form.name.trim()) return;
+    if (editingEvent) {
+      await api("PATCH", `events?id=eq.${editingEvent.id}`, form);
+    } else {
+      await api("POST", "events", { ...form, date: selectedDate });
+    }
+    setShowModal(false);
+    loadEvents();
+  };
+
+  const deleteEvent = async (id) => {
+    await api("DELETE", `events?id=eq.${id}`);
+    setShowModal(false);
+    loadEvents();
+  };
+
+  const upcomingEvents = events.filter(e => e.date >= formatDate(today)).slice(0, 5);
   const allEvents = [...events].sort((a,b) => a.date.localeCompare(b.date));
   const formatDisplayDate = (d) => { const [y,m,day] = d.split("-"); return `${day} de ${MONTHS[parseInt(m)-1]} de ${y}`; };
 
@@ -62,7 +102,9 @@ export default function App() {
       </div>
 
       <div style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
-        {view==="calendar" && (
+        {loading && <div style={{ textAlign:"center", color:"#666", padding:"60px 0" }}>Carregando eventos...</div>}
+
+        {!loading && view==="calendar" && (
           <>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
               <button onClick={prevMonth} style={{ background:"transparent", border:"1px solid #2a2620", color:"#888", fontSize:18, width:40, height:40, borderRadius:3, cursor:"pointer" }}>←</button>
@@ -97,7 +139,7 @@ export default function App() {
             {upcomingEvents.length > 0 && (
               <div style={{ marginTop:36 }}>
                 <div style={{ fontSize:10, letterSpacing:4, color:"#C9A84C", textTransform:"uppercase", marginBottom:16 }}>Próximos Eventos</div>
-                {upcomingEvents.slice(0,5).map(ev => (
+                {upcomingEvents.map(ev => (
                   <div key={ev.id} onClick={() => openEditEvent(ev)} style={{ display:"flex", alignItems:"center", gap:16, padding:"12px 16px", borderRadius:4, background:"#141210", marginBottom:8, cursor:"pointer", borderLeft:`3px solid ${ev.color}` }}>
                     <div style={{ minWidth:140, fontSize:12, color:"#888" }}>{formatDisplayDate(ev.date)}</div>
                     {ev.time && <div style={{ fontSize:12, color:ev.color, minWidth:44 }}>{ev.time}</div>}
@@ -108,7 +150,8 @@ export default function App() {
             )}
           </>
         )}
-        {view==="list" && (
+
+        {!loading && view==="list" && (
           <div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
               <div style={{ fontSize:10, letterSpacing:4, color:"#C9A84C", textTransform:"uppercase" }}>Todos os Eventos ({allEvents.length})</div>
@@ -140,20 +183,20 @@ export default function App() {
           <div style={{ background:"#1a1710", border:"1px solid #2a2620", borderRadius:6, padding:32, width:440, maxWidth:"90vw" }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize:10, letterSpacing:4, color:"#C9A84C", textTransform:"uppercase", marginBottom:20 }}>{editingEvent?"Editar Evento":"Novo Evento"}</div>
             <div style={{ fontSize:12, color:"#888", marginBottom:4 }}>Data</div>
-            <input type="date" value={selectedDate||""} onChange={e => setSelectedDate(e.target.value)} style={{ width:"100%", padding:"10px 12px", background:"#0f0e0c", border:"1px solid #2a2620", borderRadius:3, color:"#e8e0d0", fontSize:13, fontFamily:"inherit", boxSizing:"border-box", outline:"none" }}/>
+            <input type="date" value={selectedDate||""} onChange={e => setSelectedDate(e.target.value)} style={inp}/>
             <div style={{ fontSize:12, color:"#888", marginBottom:4, marginTop:14 }}>Nome do Evento *</div>
-            <input type="text" placeholder="Ex: Casamento Silva & Costa" value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} style={{ width:"100%", padding:"10px 12px", background:"#0f0e0c", border:"1px solid #2a2620", borderRadius:3, color:"#e8e0d0", fontSize:13, fontFamily:"inherit", boxSizing:"border-box", outline:"none" }}/>
+            <input type="text" placeholder="Ex: Casamento Silva & Costa" value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} style={inp}/>
             <div style={{ fontSize:12, color:"#888", marginBottom:4, marginTop:14 }}>Horário</div>
-            <input type="time" value={form.time} onChange={e => setForm(f=>({...f,time:e.target.value}))} style={{ width:"100%", padding:"10px 12px", background:"#0f0e0c", border:"1px solid #2a2620", borderRadius:3, color:"#e8e0d0", fontSize:13, fontFamily:"inherit", boxSizing:"border-box", outline:"none" }}/>
+            <input type="time" value={form.time} onChange={e => setForm(f=>({...f,time:e.target.value}))} style={inp}/>
             <div style={{ fontSize:12, color:"#888", marginBottom:4, marginTop:14 }}>Descrição</div>
-            <textarea placeholder="Detalhes do evento..." value={form.description} onChange={e => setForm(f=>({...f,description:e.target.value}))} rows={3} style={{ width:"100%", padding:"10px 12px", background:"#0f0e0c", border:"1px solid #2a2620", borderRadius:3, color:"#e8e0d0", fontSize:13, fontFamily:"inherit", boxSizing:"border-box", outline:"none", resize:"vertical" }}/>
+            <textarea placeholder="Detalhes do evento..." value={form.description} onChange={e => setForm(f=>({...f,description:e.target.value}))} rows={3} style={{...inp, resize:"vertical"}}/>
             <div style={{ fontSize:12, color:"#888", marginBottom:8, marginTop:14 }}>Cor</div>
             <div style={{ display:"flex", gap:8 }}>
               {EVENT_COLORS.map(c => <div key={c.value} onClick={() => setForm(f=>({...f,color:c.value}))} title={c.label} style={{ width:28, height:28, borderRadius:"50%", background:c.value, cursor:"pointer", border:form.color===c.value?"2px solid #fff":"2px solid transparent" }}/>)}
             </div>
             <div style={{ display:"flex", gap:10, marginTop:24 }}>
               <button onClick={saveEvent} style={{ flex:1, padding:"12px", background:"#C9A84C", color:"#0f0e0c", border:"none", borderRadius:3, fontSize:12, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", fontFamily:"inherit" }}>Salvar</button>
-              {editingEvent && <button onClick={() => { deleteEvent(editingEvent.id); setShowModal(false); }} style={{ padding:"12px 16px", background:"transparent", color:"#E07B5A", border:"1px solid #E07B5A44", borderRadius:3, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>Excluir</button>}
+              {editingEvent && <button onClick={() => deleteEvent(editingEvent.id)} style={{ padding:"12px 16px", background:"transparent", color:"#E07B5A", border:"1px solid #E07B5A44", borderRadius:3, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>Excluir</button>}
               <button onClick={() => setShowModal(false)} style={{ padding:"12px 16px", background:"transparent", color:"#666", border:"1px solid #2a2620", borderRadius:3, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
             </div>
           </div>
@@ -162,3 +205,5 @@ export default function App() {
     </div>
   );
 }
+
+const inp = { width:"100%", padding:"10px 12px", background:"#0f0e0c", border:"1px solid #2a2620", borderRadius:3, color:"#e8e0d0", fontSize:13, fontFamily:"inherit", boxSizing:"border-box", outline:"none" };
